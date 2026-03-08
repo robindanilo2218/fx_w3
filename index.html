@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archivos Web</title>
+    
+    <!-- Tailwind CSS para los estilos (sin compilar, directo del CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Phosphor Icons para los íconos (limpios y modernos) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Configuración personalizada de Tailwind para colores estilo Material You -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'material-bg': '#f0f4f8',
+                        'material-surface': '#ffffff',
+                        'material-primary': '#0b57d0',
+                        'material-primary-container': '#d3e3fd',
+                        'material-on-primary-container': '#041e49',
+                    },
+                    fontFamily: {
+                        sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Ocultar scrollbar para un diseño más limpio */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Transiciones suaves */
+        .fade-in {
+            animation: fadeIn 0.2s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-material-bg text-gray-800 font-sans h-screen flex overflow-hidden selection:bg-blue-200">
+
+    <!-- Pantalla de Error (Si el navegador no soporta la API) -->
+    <div id="unsupported-screen" class="hidden fixed inset-0 bg-material-bg z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-3xl shadow-lg max-w-md text-center border border-gray-100">
+            <i class="ph-fill ph-warning-circle text-6xl text-red-500 mb-4"></i>
+            <h1 class="text-2xl font-bold mb-2">Navegador no soportado</h1>
+            <p class="text-gray-600 mb-6">
+                Tu navegador actual no soporta la API de Acceso al Sistema de Archivos. 
+                Por favor, abre este archivo en <b>Google Chrome</b>, <b>Microsoft Edge</b> o <b>Brave</b> en una computadora.
+            </p>
+        </div>
+    </div>
+
+    <!-- Barra Lateral (Sidebar) -->
+    <aside id="sidebar" class="w-64 transition-all duration-300 flex-shrink-0 flex flex-col overflow-hidden hidden md:flex">
+        <div class="p-4 flex items-center gap-3 mt-2">
+            <div class="bg-material-primary text-white p-2 rounded-xl">
+                <i class="ph-fill ph-folder text-xl"></i>
+            </div>
+            <span class="text-xl font-medium tracking-tight">Archivos</span>
+        </div>
+        
+        <nav class="flex-1 px-3 py-4 space-y-1">
+            <button onclick="navigateHome()" id="btn-home" class="w-full flex items-center gap-3 px-4 py-3 rounded-full transition-colors bg-material-primary-container text-material-on-primary-container font-medium">
+                <i class="ph ph-house text-xl"></i>
+                <span>Inicio</span>
+            </button>
+            <button class="w-full flex items-center gap-3 px-4 py-3 rounded-full hover:bg-gray-200 text-gray-700 transition-colors">
+                <i class="ph ph-clock text-xl"></i>
+                <span>Recientes</span>
+            </button>
+            <button class="w-full flex items-center gap-3 px-4 py-3 rounded-full hover:bg-gray-200 text-gray-700 transition-colors">
+                <i class="ph ph-star text-xl"></i>
+                <span>Destacados</span>
+            </button>
+            
+            <div class="pt-6 pb-2">
+                <p class="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Almacenamiento local</p>
+            </div>
+            <button onclick="openRootFolder()" class="w-full flex items-center gap-3 px-4 py-3 rounded-full hover:bg-gray-200 text-gray-700 transition-colors">
+                <i class="ph ph-hard-drive text-xl"></i>
+                <span class="text-left flex-1 truncate" id="sidebar-folder-name">Abrir Carpeta...</span>
+            </button>
+        </nav>
+    </aside>
+
+    <!-- Área Principal -->
+    <main class="flex-1 flex flex-col min-w-0 bg-material-surface rounded-l-none md:rounded-l-[2rem] shadow-sm my-0 md:my-2 mr-0 md:mr-2 border border-gray-100 overflow-hidden relative">
+        
+        <!-- Cabecera -->
+        <header class="h-16 flex items-center justify-between px-4 border-b border-gray-100 flex-shrink-0">
+            <div class="flex items-center gap-2 overflow-hidden">
+                <button onclick="toggleSidebar()" class="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition-colors md:hidden">
+                    <i class="ph ph-list text-xl"></i>
+                </button>
+                
+                <!-- Migas de pan (Breadcrumbs) -->
+                <div id="breadcrumbs" class="flex items-center overflow-x-auto hide-scrollbar whitespace-nowrap ml-2">
+                    <span class="text-gray-500 text-sm font-medium px-2">Ninguna carpeta seleccionada</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 ml-4">
+                <div class="hidden sm:flex relative mr-2">
+                    <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" placeholder="Buscar..." class="pl-10 pr-4 py-2 bg-material-bg border-none rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-material-primary w-48 transition-all" disabled>
+                </div>
+                
+                <div class="flex bg-material-bg rounded-full p-1">
+                    <button onclick="setViewMode('grid')" id="btn-grid" class="p-1.5 rounded-full transition-colors bg-white shadow-sm text-material-primary">
+                        <i class="ph ph-squares-four text-lg"></i>
+                    </button>
+                    <button onclick="setViewMode('list')" id="btn-list" class="p-1.5 rounded-full transition-colors text-gray-500 hover:text-gray-700">
+                        <i class="ph ph-list-dashes text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Contenedor de Archivos -->
+        <div id="content-area" class="flex-1 overflow-y-auto p-6 relative">
+            <!-- Estado Inicial (Vacío) -->
+            <div id="empty-state" class="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto fade-in">
+                <div class="bg-blue-50 p-6 rounded-full mb-6">
+                    <i class="ph-fill ph-folder-open text-7xl text-blue-400"></i>
+                </div>
+                <h2 class="text-2xl font-semibold mb-2 text-gray-800">Tus archivos locales</h2>
+                <p class="text-gray-500 mb-8">
+                    Selecciona una carpeta de tu computadora para explorarla. Todo se procesa en tu navegador, sin internet.
+                </p>
+                <button onclick="openRootFolder()" class="bg-material-primary hover:bg-blue-700 text-white px-8 py-3 rounded-full font-medium transition-all shadow-md hover:shadow-lg flex items-center gap-2">
+                    <i class="ph ph-folder-plus text-xl"></i>
+                    Seleccionar Carpeta
+                </button>
+            </div>
+
+            <!-- Cargando -->
+            <div id="loading-state" class="hidden h-full flex items-center justify-center">
+                <div class="animate-spin rounded-full h-10 w-10 border-4 border-blue-200 border-t-material-primary"></div>
+            </div>
+
+            <!-- Grilla / Lista de Archivos -->
+            <div id="file-container" class="hidden"></div>
+        </div>
+    </main>
+
+    <!-- Modal de Vista Previa -->
+    <div id="preview-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden fade-in">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-4 border-b border-gray-100 bg-white">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div id="preview-icon"></div>
+                    <h3 id="preview-title" class="font-semibold text-gray-900 truncate">archivo.ext</h3>
+                </div>
+                <button onclick="closePreview()" class="p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors">
+                    <i class="ph ph-x text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div id="preview-content" class="flex-1 overflow-auto bg-[#F8F9FA] flex items-center justify-center p-6 relative min-h-[50vh]">
+                <!-- El contenido (img, video, etc) se inyecta aquí -->
+            </div>
+
+            <!-- Modal Footer (Info) -->
+            <div id="preview-info" class="bg-white p-4 border-t border-gray-100 flex flex-wrap gap-6 text-sm text-gray-600 justify-center">
+                <!-- Metadatos se inyectan aquí -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Script de Lógica Principal -->
+    <script>
+        // --- Estado Global ---
+        let rootHandle = null;
+        let pathStack = []; // Array de handles (carpetas)
+        let currentEntries = []; // Archivos y carpetas actuales
+        let viewMode = 'grid'; // 'grid' | 'list'
+        let objectUrlToRevoke = null; // Para limpiar memoria de previsualizaciones
+
+        // --- Verificación de Soporte ---
+        if (!('showDirectoryPicker' in window)) {
+            document.getElementById('unsupported-screen').classList.remove('hidden');
+        }
+
+        // --- Utilidades ---
+        const formatBytes = (bytes, decimals = 2) => {
+            if (!+bytes) return '0 B';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        };
+
+        const escapeHTML = (str) => {
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag] || tag));
+        };
+
+        const getIconForFile = (filename, isGrid = true) => {
+            const ext = filename.split('.').pop().toLowerCase();
+            const sizeClass = isGrid ? 'text-5xl mb-3' : 'text-2xl mr-4';
+            
+            const icons = {
+                image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'],
+                video: ['mp4', 'webm', 'mov', 'avi', 'mkv'],
+                audio: ['mp3', 'wav', 'ogg', 'm4a'],
+                code: ['html', 'css', 'js', 'json', 'py', 'java', 'c', 'cpp', 'jsx', 'ts'],
+                doc: ['pdf', 'doc', 'docx', 'txt'],
+                archive: ['zip', 'rar', '7z', 'tar', 'gz']
+            };
+
+            if (icons.image.includes(ext)) return `<i class="ph-fill ph-image ${sizeClass} text-blue-500"></i>`;
+            if (icons.video.includes(ext)) return `<i class="ph-fill ph-video-camera ${sizeClass} text-red-500"></i>`;
+            if (icons.audio.includes(ext)) return `<i class="ph-fill ph-music-notes ${sizeClass} text-purple-500"></i>`;
+            if (icons.code.includes(ext)) return `<i class="ph-fill ph-file-code ${sizeClass} text-indigo-500"></i>`;
+            if (icons.doc.includes(ext)) return `<i class="ph-fill ph-file-text ${sizeClass} text-blue-700"></i>`;
+            if (icons.archive.includes(ext)) return `<i class="ph-fill ph-file-archive ${sizeClass} text-yellow-600"></i>`;
+            
+            return `<i class="ph-fill ph-file ${sizeClass} text-gray-400"></i>`;
+        };
+
+        // --- Lógica Principal ---
+
+        // Alternar barra lateral en móviles
+        const toggleSidebar = () => {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('hidden');
+            sidebar.classList.toggle('absolute');
+            sidebar.classList.toggle('z-40');
+            sidebar.classList.toggle('h-full');
+            sidebar.classList.toggle('bg-material-bg');
+            sidebar.classList.toggle('shadow-2xl');
+        };
+
+        // Cambiar vista (Grilla / Lista)
+        const setViewMode = (mode) => {
+            viewMode = mode;
+            
+            // Actualizar botones
+            const btnGrid = document.getElementById('btn-grid');
+            const btnList = document.getElementById('btn-list');
+            
+            if (mode === 'grid') {
+                btnGrid.className = "p-1.5 rounded-full transition-colors bg-white shadow-sm text-material-primary";
+                btnList.className = "p-1.5 rounded-full transition-colors text-gray-500 hover:text-gray-700";
+            } else {
+                btnList.className = "p-1.5 rounded-full transition-colors bg-white shadow-sm text-material-primary";
+                btnGrid.className = "p-1.5 rounded-full transition-colors text-gray-500 hover:text-gray-700";
+            }
+            
+            if (currentEntries.length > 0) renderEntries();
+        };
+
+        // Ir al inicio (Raíz)
+        const navigateHome = () => {
+            if (rootHandle) {
+                pathStack = [rootHandle];
+                readDirectory(rootHandle);
+            }
+        };
+
+        // Abrir selector de carpeta
+        const openRootFolder = async () => {
+            try {
+                const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+                rootHandle = dirHandle;
+                pathStack = [dirHandle];
+                document.getElementById('sidebar-folder-name').textContent = dirHandle.name;
+                
+                // Estilo activo al botón de inicio
+                document.getElementById('btn-home').classList.replace('text-gray-700', 'text-material-on-primary-container');
+                document.getElementById('btn-home').classList.replace('hover:bg-gray-200', 'bg-material-primary-container');
+
+                await readDirectory(dirHandle);
+            } catch (error) {
+                console.log("Selección cancelada o error:", error);
+            }
+        };
+
+        // Leer contenido de un directorio
+        const readDirectory = async (dirHandle) => {
+            showState('loading');
+            renderBreadcrumbs();
+
+            try {
+                const newEntries = [];
+                for await (const entry of dirHandle.values()) {
+                    newEntries.push(entry);
+                }
+
+                // Ordenar: Carpetas primero, luego alfabéticamente
+                newEntries.sort((a, b) => {
+                    if (a.kind === b.kind) return a.name.localeCompare(b.name);
+                    return a.kind === 'directory' ? -1 : 1;
+                });
+
+                // Si es modo lista, necesitamos el tamaño de los archivos
+                // Para no bloquear la UI, obtenemos info básica y luego actualizamos
+                currentEntries = newEntries.map(entry => ({
+                    handle: entry,
+                    name: entry.name,
+                    kind: entry.kind,
+                    size: null,
+                    lastModified: null,
+                    fileObj: null // Caché del archivo
+                }));
+
+                renderEntries();
+                showState('content');
+
+            } catch (error) {
+                console.error("Error al leer directorio", error);
+                alert("Error al acceder a la carpeta. Revisa los permisos.");
+                showState('empty');
+            }
+        };
+
+        // Manejar click en un archivo/carpeta
+        const handleEntryClick = async (index) => {
+            const entry = currentEntries[index];
+            if (entry.kind === 'directory') {
+                pathStack.push(entry.handle);
+                await readDirectory(entry.handle);
+            } else {
+                await previewFile(entry);
+            }
+        };
+
+        // Navegar por las migas de pan
+        const navigateToBreadcrumb = async (index) => {
+            pathStack = pathStack.slice(0, index + 1);
+            await readDirectory(pathStack[pathStack.length - 1]);
+        };
+
+        // Mostrar un estado de la UI (vacío, cargando, contenido)
+        const showState = (state) => {
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('file-container').classList.add('hidden');
+
+            if (state === 'empty') document.getElementById('empty-state').classList.remove('hidden');
+            if (state === 'loading') document.getElementById('loading-state').classList.remove('hidden');
+            if (state === 'content') {
+                if (currentEntries.length === 0) {
+                    document.getElementById('file-container').innerHTML = `
+                        <div class="h-full flex flex-col items-center justify-center text-gray-400 mt-20 fade-in">
+                            <i class="ph ph-folder-dashed text-7xl mb-4 opacity-50"></i>
+                            <p>Esta carpeta está vacía</p>
+                        </div>
+                    `;
+                }
+                document.getElementById('file-container').classList.remove('hidden');
+            }
+        };
+
+        // Renderizar Migas de pan
+        const renderBreadcrumbs = () => {
+            const container = document.getElementById('breadcrumbs');
+            container.innerHTML = '';
+            
+            if (pathStack.length === 0) {
+                container.innerHTML = '<span class="text-gray-500 text-sm font-medium px-2">Ninguna carpeta seleccionada</span>';
+                return;
+            }
+
+            pathStack.forEach((handle, index) => {
+                const isLast = index === pathStack.length - 1;
+                const name = escapeHTML(index === 0 ? handle.name : handle.name);
+                
+                const btn = document.createElement('button');
+                btn.className = `px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium ${isLast ? 'text-gray-900' : 'text-gray-500'}`;
+                btn.textContent = name;
+                btn.onclick = () => navigateToBreadcrumb(index);
+                container.appendChild(btn);
+
+                if (!isLast) {
+                    const separator = document.createElement('i');
+                    separator.className = "ph ph-caret-right text-gray-400 mx-1 flex-shrink-0";
+                    container.appendChild(separator);
+                }
+            });
+        };
+
+        // Renderizar Archivos (Grilla o Lista)
+        const renderEntries = async () => {
+            const container = document.getElementById('file-container');
+            container.innerHTML = '';
+            container.className = 'fade-in pb-10'; // Reset clases
+
+            if (viewMode === 'grid') {
+                container.classList.add('grid', 'grid-cols-2', 'sm:grid-cols-3', 'md:grid-cols-4', 'lg:grid-cols-5', 'xl:grid-cols-6', 'gap-4');
+                
+                let html = '';
+                currentEntries.forEach((entry, idx) => {
+                    const safeName = escapeHTML(entry.name);
+                    const icon = entry.kind === 'directory' 
+                        ? `<i class="ph-fill ph-folder text-5xl mb-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>`
+                        : getIconForFile(entry.name, true);
+
+                    html += `
+                        <button onclick="handleEntryClick(${idx})" class="group flex flex-col items-center p-4 bg-gray-50 hover:bg-blue-50/50 rounded-2xl border border-transparent hover:border-blue-100 transition-all text-center focus:outline-none focus:ring-2 focus:ring-material-primary">
+                            ${icon}
+                            <span class="text-sm text-gray-700 font-medium truncate w-full" title="${safeName}">${safeName}</span>
+                        </button>
+                    `;
+                });
+                container.innerHTML = html;
+
+            } else {
+                // Vista de Lista
+                let html = `
+                    <div class="w-full">
+                        <div class="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100 sticky top-0 bg-material-surface z-10">
+                            <div class="col-span-8 sm:col-span-7">Nombre</div>
+                            <div class="col-span-4 sm:col-span-5 text-right sm:text-left">Información</div>
+                        </div>
+                        <div class="divide-y divide-gray-50">
+                `;
+                
+                currentEntries.forEach((entry, idx) => {
+                    const safeName = escapeHTML(entry.name);
+                    const icon = entry.kind === 'directory' 
+                        ? `<i class="ph-fill ph-folder text-2xl mr-4 text-blue-400"></i>`
+                        : getIconForFile(entry.name, false);
+
+                    // ID único para actualizar tamaño luego
+                    const sizeId = `size-${idx}`;
+
+                    html += `
+                        <button onclick="handleEntryClick(${idx})" class="w-full grid grid-cols-12 gap-4 px-4 py-3 hover:bg-gray-50 items-center text-left transition-colors focus:outline-none focus:bg-blue-50">
+                            <div class="col-span-8 sm:col-span-7 flex items-center overflow-hidden">
+                                ${icon}
+                                <span class="text-sm font-medium text-gray-800 truncate" title="${safeName}">${safeName}</span>
+                            </div>
+                            <div class="col-span-4 sm:col-span-5 text-right sm:text-left text-xs text-gray-500 truncate" id="${sizeId}">
+                                ${entry.kind === 'directory' ? 'Carpeta' : 'Cargando...'}
+                            </div>
+                        </button>
+                    `;
+                });
+                html += `</div></div>`;
+                container.innerHTML = html;
+
+                // Cargar metadatos asíncronamente para vista de lista
+                currentEntries.forEach(async (entry, idx) => {
+                    if (entry.kind === 'file' && !entry.size) {
+                        try {
+                            const file = await entry.handle.getFile();
+                            entry.size = file.size;
+                            entry.lastModified = file.lastModified;
+                            entry.fileObj = file; // Guardar en caché
+                            
+                            const sizeEl = document.getElementById(`size-${idx}`);
+                            if (sizeEl) {
+                                const date = new Date(file.lastModified).toLocaleDateString();
+                                sizeEl.innerHTML = `<span class="hidden sm:inline mr-4">${date}</span> ${formatBytes(file.size)}`;
+                            }
+                        } catch (e) {
+                            console.warn("No se pudo leer tamaño de", entry.name);
+                            const sizeEl = document.getElementById(`size-${idx}`);
+                            if (sizeEl) sizeEl.textContent = 'Desconocido';
+                        }
+                    }
+                });
+            }
+        };
+
+        // --- Vista Previa de Archivos ---
+        const previewFile = async (entry) => {
+            const modal = document.getElementById('preview-modal');
+            const content = document.getElementById('preview-content');
+            const title = document.getElementById('preview-title');
+            const iconContainer = document.getElementById('preview-icon');
+            const info = document.getElementById('preview-info');
+
+            // Mostrar modal con estado de carga
+            modal.classList.remove('hidden');
+            content.innerHTML = '<div class="animate-spin rounded-full h-10 w-10 border-4 border-blue-200 border-t-material-primary"></div>';
+            title.textContent = entry.name;
+            iconContainer.innerHTML = getIconForFile(entry.name, false);
+            info.innerHTML = '';
+
+            try {
+                // Obtener archivo si no está en caché
+                const file = entry.fileObj || await entry.handle.getFile();
+                const ext = file.name.split('.').pop().toLowerCase();
+                
+                // Limpiar URL anterior si existe
+                if (objectUrlToRevoke) URL.revokeObjectURL(objectUrlToRevoke);
+                
+                objectUrlToRevoke = URL.createObjectURL(file);
+                
+                // Actualizar Info
+                info.innerHTML = `
+                    <div><span class="font-semibold text-gray-800">Tipo:</span> ${ext.toUpperCase() || 'Archivo'}</div>
+                    <div><span class="font-semibold text-gray-800">Tamaño:</span> ${formatBytes(file.size)}</div>
+                    <div><span class="font-semibold text-gray-800">Modificado:</span> ${new Date(file.lastModified).toLocaleString()}</div>
+                `;
+
+                // Renderizar contenido según tipo
+                if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
+                    content.innerHTML = `<img src="${objectUrlToRevoke}" class="max-w-full max-h-[75vh] object-contain rounded-lg shadow-sm">`;
+                } 
+                else if (['mp4', 'webm', 'ogg', 'mov'].includes(ext)) {
+                    content.innerHTML = `<video src="${objectUrlToRevoke}" controls autoplay class="max-w-full max-h-[75vh] rounded-lg shadow-sm bg-black"></video>`;
+                } 
+                else if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext)) {
+                    content.innerHTML = `
+                        <div class="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm text-center border border-gray-100">
+                            <i class="ph-fill ph-music-notes text-7xl text-purple-500 mb-6"></i>
+                            <h4 class="font-medium text-gray-800 mb-4 truncate">${escapeHTML(file.name)}</h4>
+                            <audio src="${objectUrlToRevoke}" controls autoplay class="w-full"></audio>
+                        </div>
+                    `;
+                } 
+                else if (['txt', 'html', 'css', 'js', 'json', 'md', 'csv'].includes(ext)) {
+                    // Leer texto (limitado para no congelar el navegador con archivos inmensos)
+                    if (file.size > 2 * 1024 * 1024) { // > 2MB
+                        content.innerHTML = showUnsupportedPreview(ext, "El archivo de texto es demasiado grande para previsualizarlo.");
+                    } else {
+                        const text = await file.text();
+                        content.innerHTML = `
+                            <pre class="w-full h-full bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-sm overflow-auto font-mono text-gray-800 whitespace-pre-wrap">${escapeHTML(text)}</pre>
+                        `;
+                    }
+                }
+                else {
+                    content.innerHTML = showUnsupportedPreview(ext, "No hay vista previa disponible para este formato.");
+                }
+
+            } catch (error) {
+                console.error("Error abriendo archivo", error);
+                content.innerHTML = showUnsupportedPreview('error', "No se pudo leer el archivo. Es posible que esté en uso o sin permisos.");
+            }
+        };
+
+        const showUnsupportedPreview = (ext, message) => `
+            <div class="text-center text-gray-500 flex flex-col items-center">
+                <div class="bg-white p-6 rounded-full shadow-sm mb-4">
+                    <i class="ph-fill ph-file text-5xl text-gray-400"></i>
+                </div>
+                <p class="font-medium text-gray-800 mb-1">Vista previa no disponible</p>
+                <p class="text-sm px-4 text-center">${message}</p>
+            </div>
+        `;
+
+        const closePreview = () => {
+            document.getElementById('preview-modal').classList.add('hidden');
+            document.getElementById('preview-content').innerHTML = ''; // Limpiar video/audio para que dejen de sonar
+            if (objectUrlToRevoke) {
+                URL.revokeObjectURL(objectUrlToRevoke);
+                objectUrlToRevoke = null;
+            }
+        };
+
+        // Cerrar modal al hacer click fuera del contenedor principal
+        document.getElementById('preview-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'preview-modal') closePreview();
+        });
+
+    </script>
+</body>
+</html>
+
